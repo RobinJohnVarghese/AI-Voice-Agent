@@ -25,7 +25,8 @@ class LLM:
     def messages(self, history: list[dict], user_text: str, lang_code: str) -> list[dict]:
         msgs = [{"role": "system", "content": SYSTEM.format(lang_name=lang.name(lang_code))}]
         msgs += [{"role": m["role"], "content": m["content"]} for m in history[-config.HISTORY_TURNS * 2:]]
-        msgs.append({"role": "user", "content": user_text})
+        # A per-turn reminder keeps small models from drifting into the language of earlier turns.
+        msgs.append({"role": "user", "content": f"{user_text}\n\n(Reply in {lang.name(lang_code)}.)"})
         return msgs
 
     def stream(self, messages: list[dict]) -> Iterator[str]:
