@@ -1,0 +1,10 @@
+fastapi==0.162.5
+uvicorn[standard]==0.54.0
+python-multipart==0.0.32
+faster-whisper==1.2.1
+piper-tts==1.8.0
+phonemizer==3.6.0
+langid==1.1.6
+requests==2.34.2
+soundfile==0.14.0
+numpy==2.2.6
