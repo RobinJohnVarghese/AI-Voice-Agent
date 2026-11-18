@@ -2,6 +2,7 @@
 import re
 
 import langid
+from langid.langid import LanguageIdentifier, model as _langid_model
 
 # iso code -> (display name, espeak-ng voice for phonemes / fallback TTS)
 LANGS = {
@@ -18,6 +19,9 @@ LANGS = {
 }
 
 langid.set_languages(list(LANGS))
+_scored = LanguageIdentifier.from_modelstring(_langid_model, norm_probs=True)
+_scored.set_languages(list(LANGS))
+SWITCH_CONFIDENCE = 0.9  # short quoted phrases are noisy ("Konnichiwa" looks German to langid)
 
 
 def detect(text: str, default: str = "en") -> str:
@@ -26,6 +30,13 @@ def detect(text: str, default: str = "en") -> str:
         return default
     code, _ = langid.classify(text)
     return code if code in LANGS else default
+
+
+def _quoted_lang(inner: str, outer: str) -> str:
+    if len(inner) < 4:
+        return outer
+    code, prob = _scored.classify(inner)
+    return code if prob >= SWITCH_CONFIDENCE and code in LANGS else outer
 
 
 def name(code: str) -> str:
@@ -50,7 +61,7 @@ def spans(text: str, base: str) -> list[tuple[str, str]]:
         if text[pos:m.start()].strip():
             out.append((text[pos:m.start()], outer))
         inner = m.group()[1:-1].strip()
-        out.append((m.group(), detect(inner, default=outer) if len(inner) >= 4 else outer))
+        out.append((m.group(), _quoted_lang(inner, outer)))
         pos = m.end()
     if text[pos:].strip():
         out.append((text[pos:], outer))

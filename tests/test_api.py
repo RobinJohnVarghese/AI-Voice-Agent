@@ -68,7 +68,10 @@ def test_voice_stream_returns_audio(client):
 
 def test_history_persisted_and_reset(client):
     client.post("/api/stream/text", json={"text": "Salut", "session": "h"})
-    assert len(client.get("/api/history", params={"session": "h"}).json()) == 2
+    hist = client.get("/api/history", params={"session": "h"}).json()
+    assert len(hist) == 2
+    bot = hist[1]
+    assert bot["role"] == "assistant" and bot["sentences"] and "ipa" in bot["sentences"][0]
     client.post("/api/reset", params={"session": "h"})
     assert client.get("/api/history", params={"session": "h"}).json() == []
 

@@ -13,8 +13,8 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import config, lang
-from .pipeline import Pipeline
+from . import config, lang, phonetics
+from .pipeline import Pipeline, split_sentences
 
 app = FastAPI(title="Offline Voice Tutor", version="2.0")
 
@@ -130,7 +130,13 @@ def annotate(body: SpeakIn):
 
 @app.get("/api/history")
 def history(session: str = "default", pipe: Pipeline = Depends(get_pipe)):
-    return pipe.store.history(session, limit=200)
+    msgs = pipe.store.history(session, limit=200)
+    for m in msgs:
+        m["lang_name"] = lang.name(m["lang"])
+        if m["role"] == "assistant":
+            m["sentences"] = [{"text": t, **phonetics.annotate(t, m["lang"], mixed=True)}
+                              for t in split_sentences(m["content"])]
+    return msgs
 
 
 @app.post("/api/reset")

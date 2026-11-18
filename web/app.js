@@ -45,6 +45,7 @@ function phHtml(p) {
   if (p.readable) h += `<div class="ph readable">${esc(p.readable)}</div>`;
   return h;
 }
+const sentHtml = sn => `<div class="sent"><div>${esc(sn.text)}</div>${phHtml(sn)}</div>`;
 function botBubble() {
   const el = add("bot", `<div class="sents"></div><div class="typing"></div><div class="meta"></div>`);
   return {el, sents: el.querySelector(".sents"), typing: el.querySelector(".typing"), meta: el.querySelector(".meta"), pending: ""};
@@ -80,7 +81,7 @@ async function streamTurn(url, init, onTranscript) {
       if (ev.type === "delta") { const x = ensure(); x.pending += ev.text; x.typing.textContent = x.pending; log.scrollTop = log.scrollHeight; }
       if (ev.type === "sentence") {
         const x = ensure();
-        x.sents.insertAdjacentHTML("beforeend", `<div class="sent"><div>${esc(ev.text)}</div>${phHtml(ev)}</div>`);
+        x.sents.insertAdjacentHTML("beforeend", sentHtml(ev));
         const k = x.pending.indexOf(ev.text);
         x.pending = k >= 0 ? x.pending.slice(k + ev.text.length).trimStart() : "";
         x.typing.textContent = x.pending;
@@ -101,6 +102,13 @@ $("send").onclick = sendText;
 $("text").onkeydown = e => { if (e.key === "Enter") sendText(); };
 
 // ---------------------------------------------------------------- recorder (tap-to-talk with VAD, or hold)
+let audioCtx = null;  // one shared context, resumed inside the user gesture
+const sharedCtx = () => {
+  audioCtx ||= new AudioContext();
+  if (audioCtx.state !== "running") audioCtx.resume();
+  return audioCtx;
+};
+
 class Recorder {
   constructor(btn, onBlob, label) {
     this.btn = btn; this.onBlob = onBlob; this.label = label; this.rec = null;
@@ -109,6 +117,7 @@ class Recorder {
   }
   async start() {
     stopAudio();
+    const ctx = sharedCtx();
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); }
     catch (e) { return setStatus("Microphone unavailable: " + e.message + " (use http://localhost or https)", true); }
@@ -116,28 +125,30 @@ class Recorder {
     this.rec = new MediaRecorder(stream);
     this.rec.ondataavailable = ev => this.chunks.push(ev.data);
     this.rec.onstop = () => {
-      stream.getTracks().forEach(t => t.stop()); this.ctx?.close();
+      clearInterval(this.timer); this.nodes?.forEach(n => n.disconnect());
+      stream.getTracks().forEach(t => t.stop());
       const blob = new Blob(this.chunks, {type: this.rec.mimeType}); this.rec = null;
       if (blob.size > 1000) this.onBlob(blob);
     };
     this.rec.start(); this.btn.classList.add("rec"); this.btn.textContent = "Listening… (tap to stop)";
-    this.vad(stream);
+    this.vad(ctx, stream);
   }
-  vad(stream) {  // auto-stop after ~1.3 s of silence once speech was heard
-    this.ctx = new AudioContext();
-    const an = this.ctx.createAnalyser(); an.fftSize = 1024;
-    this.ctx.createMediaStreamSource(stream).connect(an);
+  // Auto-stop ~1.3 s after speech ends; give up after 10 s with no speech or 30 s total.
+  vad(ctx, stream) {
+    const src = ctx.createMediaStreamSource(stream), an = ctx.createAnalyser(), mute = ctx.createGain();
+    an.fftSize = 1024; mute.gain.value = 0;
+    src.connect(an); an.connect(mute); mute.connect(ctx.destination);  // keep the graph pulled
+    this.nodes = [src, an, mute];
     const data = new Float32Array(an.fftSize);
     let heard = false, quietSince = performance.now();
-    const tick = () => {
-      if (!this.rec) return;
+    this.timer = setInterval(() => {  // setInterval keeps running when the tab is in the background
+      if (!this.rec) return clearInterval(this.timer);
       an.getFloatTimeDomainData(data);
       const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length), now = performance.now();
       if (rms > 0.02) { heard = true; quietSince = now; }
-      if ((heard && now - quietSince > 1300) || now - this.t0 > 30000) return this.stop();
-      requestAnimationFrame(tick);
-    };
-    tick();
+      const elapsed = now - this.t0;
+      if ((heard && now - quietSince > 1300) || (!heard && elapsed > 10000) || elapsed > 30000) this.stop();
+    }, 50);
   }
   stop() {
     if (this.rec?.state === "recording") this.rec.stop();
@@ -247,8 +258,12 @@ $("reset").onclick = async () => {
     setStatus(h.llm_ready ? `Ready · ${h.llm} · whisper-${h.whisper} · ★ neural voice`
       : `LLM "${h.llm}" not available — start Ollama and pull the model.`, !h.llm_ready);
     for (const m of await (await fetch("/api/history?session=" + session)).json()) {
-      if (m.role === "user") add("user", esc(m.content));
-      else { const b = botBubble(); b.sents.innerHTML = `<div class="sent"><div>${esc(m.content)}</div></div>`; finishBubble(b, m.content, m.lang, m.lang); }
+      if (m.role === "user") add("user", (m.mode === "voice" ? `<i>(voice · ${esc(m.lang_name)})</i> ` : "") + esc(m.content));
+      else {
+        const b = botBubble();
+        for (const sn of m.sentences || [{text: m.content}]) b.sents.insertAdjacentHTML("beforeend", sentHtml(sn));
+        finishBubble(b, m.content, m.lang, m.lang_name);
+      }
     }
   } catch (e) { setStatus("Server unreachable: " + e.message, true); }
 })();

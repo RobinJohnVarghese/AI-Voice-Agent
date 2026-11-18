@@ -218,7 +218,7 @@ More cores or a GPU reduce this a lot.
 
 ```bash
 pip install pytest
-python -m pytest -q tests     # 25 tests; uses fake models, runs in ~2 s
+python -m pytest -q tests     # 27 tests; uses fake models, runs in ~2 s
 ```
 
 ---

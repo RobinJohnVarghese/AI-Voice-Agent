@@ -25,6 +25,16 @@ def _cut(buf: str) -> int:
     return 0
 
 
+def split_sentences(text: str) -> list[str]:
+    out = []
+    while end := _cut(text):
+        out.append(text[:end].strip())
+        text = text[end:]
+    if text.strip():
+        out.append(text.strip())
+    return out
+
+
 class Pipeline:
     def __init__(self, stt=None, llm=None, tts=None, store=None):
         if stt is None:

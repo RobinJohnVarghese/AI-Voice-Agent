@@ -13,3 +13,12 @@ def test_quoted_phrase_switches_language():
 
 def test_unquoted_text_keeps_base():
     assert lang.spans("Hola", "es") == [("Hola", "es")]
+
+
+def test_short_romanized_quote_keeps_base():
+    assert lang.spans('"Konnichiwa"', "ja") == [('"Konnichiwa"', "ja")]
+
+
+def test_non_latin_quote_switches():
+    runs = lang.spans('Hello in Japanese is "こんにちは".', "en")
+    assert runs[-1][1] == "ja"
