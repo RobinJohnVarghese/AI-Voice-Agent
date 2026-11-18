@@ -1,4 +1,7 @@
-"""Local LLM via Ollama (quantized GGUF model, CPU friendly)."""
+"""Local LLM via Ollama (quantized GGUF model, CPU friendly), streamed token by token."""
+import json
+from collections.abc import Iterator
+
 import requests
 
 from . import config, lang
@@ -11,26 +14,46 @@ Rules:
 - No markdown, no bullet lists, no emojis, no IPA (phonetics are added automatically).
 - If the user's message has a grammar or word-choice mistake, start your reply with the corrected sentence
   (for example: "Correction: Me gusta la música."), then continue the conversation.
-- When asked how to say or pronounce something, give the phrase itself and a simple syllable breakdown like "bon-JOOR"."""
+- When asked how to say or pronounce something, give the phrase itself and a simple syllable breakdown like "bon-ZHOOR"."""
+
+
+class LLMError(RuntimeError):
+    pass
 
 
 class LLM:
-    def __init__(self):
-        self.sessions: dict[str, list[dict]] = {}
+    def messages(self, history: list[dict], user_text: str, lang_code: str) -> list[dict]:
+        msgs = [{"role": "system", "content": SYSTEM.format(lang_name=lang.name(lang_code))}]
+        msgs += [{"role": m["role"], "content": m["content"]} for m in history[-config.HISTORY_TURNS * 2:]]
+        msgs.append({"role": "user", "content": user_text})
+        return msgs
 
-    def chat(self, session_id: str, user_text: str, lang_code: str) -> str:
-        history = self.sessions.setdefault(session_id, [])
-        messages = [{"role": "system", "content": SYSTEM.format(lang_name=lang.name(lang_code))}]
-        messages += history[-config.HISTORY_TURNS * 2:]
-        messages.append({"role": "user", "content": user_text})
-        r = requests.post(f"{config.OLLAMA_URL}/api/chat", timeout=300, json={
-            "model": config.LLM_MODEL, "messages": messages, "stream": False, "keep_alive": "30m",
-            "options": {"num_ctx": config.LLM_CTX, "temperature": 0.6, "num_predict": 200},
-        })
-        r.raise_for_status()
-        reply = r.json()["message"]["content"].strip()
-        history += [{"role": "user", "content": user_text}, {"role": "assistant", "content": reply}]
-        return reply
+    def stream(self, messages: list[dict]) -> Iterator[str]:
+        try:
+            r = requests.post(f"{config.OLLAMA_URL}/api/chat", stream=True, timeout=(5, 300), json={
+                "model": config.LLM_MODEL, "messages": messages, "stream": True,
+                "keep_alive": config.LLM_KEEP_ALIVE,
+                "options": {"num_ctx": config.LLM_CTX, "temperature": 0.6, "num_predict": 220},
+            })
+            r.raise_for_status()
+        except requests.RequestException as e:
+            raise LLMError(f"Cannot reach Ollama at {config.OLLAMA_URL} ({e}). Is `ollama serve` running "
+                           f"and is `{config.LLM_MODEL}` pulled?") from e
+        with r:
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                data = json.loads(line)
+                if "error" in data:
+                    raise LLMError(data["error"])
+                if tok := data.get("message", {}).get("content"):
+                    yield tok
+                if data.get("done"):
+                    break
 
-    def reset(self, session_id: str):
-        self.sessions.pop(session_id, None)
+    def ping(self) -> bool:
+        try:
+            tags = requests.get(f"{config.OLLAMA_URL}/api/tags", timeout=2).json()
+            return any(m["name"].startswith(config.LLM_MODEL) for m in tags.get("models", []))
+        except requests.RequestException:
+            return False

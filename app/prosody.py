@@ -17,7 +17,7 @@ PAUSES = {  # seconds of silence after a segment ending with this mark
     "\n": 0.70,
 }
 _SPLIT = re.compile(r"(\.\.\.|…|[.!?。！？।॥؟]+|[,;:、،，；：]|\s[—–-]\s|\n+)")
-_MARKDOWN = re.compile(r"[*_#`>\[\]{}|~^]")
+_MARKDOWN = re.compile(r"[*_#`>\[\]{}|~^\"“”„«»「」]")
 _EMOJI = re.compile("[\U0001F300-\U0001FAFF\U00002700-\U000027BF]")
 
 

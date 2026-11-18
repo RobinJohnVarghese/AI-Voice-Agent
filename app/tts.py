@@ -45,12 +45,18 @@ class TTS:
         data, sr = sf.read(io.BytesIO(wav), dtype="float32")
         return _resample(data, sr)
 
-    def synthesize(self, text: str, code: str, slow: bool = False) -> bytes:
+    def _render(self, text: str, code: str, slow: bool) -> list[np.ndarray]:
         voice = self._voice(code)
         out = []
         for seg in prosody.segment(text):
             audio = self._piper(voice, seg.text, slow) if voice else self._espeak(code, seg.text, slow)
             out += [audio, np.zeros(int(SR * seg.pause * (1.3 if slow else 1.0)), np.float32)]
+        return out
+
+    def synthesize(self, text: str, code: str, slow: bool = False, mixed: bool = True) -> bytes:
+        """WAV bytes. With ``mixed``, quoted phrases in another language get that language's voice."""
+        runs = lang.spans(text, code) if mixed else [(text, code)]
+        out = [a for chunk, c in runs for a in self._render(chunk, c, slow)]
         audio = np.concatenate(out) if out else np.zeros(SR // 2, np.float32)
         buf = io.BytesIO()
         sf.write(buf, audio, SR, format="WAV", subtype="PCM_16")

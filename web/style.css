@@ -1,0 +1,46 @@
+:root{--bg:#0f1115;--card:#181b22;--card2:#20242d;--line:#2e3440;--fg:#e8e8ea;--mut:#9aa0aa;--acc:#4f8cff;--ok:#3cb371;--bad:#e5534b;--ipa:#c9b6ff;--read:#ffd479;--rom:#7fd1c7}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:10px 18px;border-bottom:1px solid #262a33;display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+header h1{font-size:17px;margin:0 auto 0 0}
+header label{color:var(--mut);font-size:13px;display:flex;gap:6px;align-items:center}
+select,input,button,textarea{font:inherit;color:var(--fg);background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+button{cursor:pointer;background:var(--acc);border:none;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+button.sec{background:#2a2f3a}
+button.rec{background:var(--bad);animation:pulse 1s infinite}
+button.small{padding:3px 8px;font-size:12px;font-weight:500}
+@keyframes pulse{50%{opacity:.7}}
+main{display:grid;grid-template-columns:1fr 380px;gap:16px;padding:16px;max-width:1240px;margin:auto}
+@media(max-width:920px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border-radius:12px;padding:14px}
+#log{height:64vh;overflow:auto;display:flex;flex-direction:column;gap:10px;padding-right:4px}
+.msg{padding:10px 12px;border-radius:10px;max-width:88%}
+.user{background:#243150;align-self:flex-end}
+.bot{background:var(--card2);align-self:flex-start;min-width:120px}
+.sent{margin-bottom:6px}
+.ph{font-size:13.5px;margin-top:2px}
+.ph.ipa{font-family:"Doulos SIL","Charis SIL","Gentium Plus",serif;color:var(--ipa)}
+.ph.readable{color:var(--read)}
+.ph.romanized{color:var(--rom)}
+body.hide-ipa .ph.ipa,body.hide-readable .ph.readable,body.hide-romanized .ph.romanized{display:none}
+.meta{color:var(--mut);font-size:12px;margin-top:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.typing{color:var(--mut)}
+.row{display:flex;gap:8px;margin-top:10px}
+.row input{flex:1}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{background:#2a2f3a}
+.tabs button.on{background:var(--acc)}
+.w{display:inline-block;margin:3px;padding:3px 8px;border-radius:6px;font-size:13px;cursor:pointer}
+.w.ok{background:#1e3b2a;color:#8fe0ad}
+.w.bad{background:#3d1f1f;color:#ff9b95}
+.score{font-size:28px;font-weight:700}
+.diff{font-family:"Doulos SIL","Charis SIL",serif;font-size:18px;margin:6px 0}
+.diff .x{background:#5a2323;color:#ffb3ae;border-radius:3px;padding:0 2px}
+.diff .ins{background:#4a3b14;color:#ffd479;border-radius:3px;padding:0 2px}
+.tips{margin:8px 0 0;padding-left:18px;color:#d7dae0;font-size:13.5px}
+.hidden{display:none}
+#spark{width:100%;height:60px}
+.weak{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #262a33;cursor:pointer}
+h2{font-size:15px;margin:0 0 8px}
+.err{color:var(--bad)}

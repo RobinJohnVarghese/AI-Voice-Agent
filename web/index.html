@@ -3,33 +3,18 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Offline Voice Tutor</title>
-<style>
-  :root{--bg:#0f1115;--card:#181b22;--fg:#e8e8ea;--mut:#9aa0aa;--acc:#4f8cff;--ok:#3cb371;--bad:#e5534b}
-  *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
-  header{padding:12px 20px;border-bottom:1px solid #262a33;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-  header h1{font-size:17px;margin:0 auto 0 0}
-  select,input,button,textarea{font:inherit;color:var(--fg);background:#20242d;border:1px solid #2e3440;border-radius:8px;padding:8px 10px}
-  button{cursor:pointer;background:var(--acc);border:none;font-weight:600}
-  button.sec{background:#2a2f3a}button.rec{background:var(--bad)}
-  main{display:grid;grid-template-columns:1fr 360px;gap:16px;padding:16px;max-width:1200px;margin:auto}
-  @media(max-width:900px){main{grid-template-columns:1fr}}
-  .card{background:var(--card);border-radius:12px;padding:14px}
-  #log{height:60vh;overflow:auto;display:flex;flex-direction:column;gap:10px}
-  .msg{padding:10px 12px;border-radius:10px;max-width:85%}
-  .user{background:#243150;align-self:flex-end}.bot{background:#20242d;align-self:flex-start}
-  .ipa{font-family:"Doulos SIL","Charis SIL",serif;color:#c9b6ff;font-size:14px;margin-top:4px}
-  .meta{color:var(--mut);font-size:12px;margin-top:4px}
-  .row{display:flex;gap:8px;margin-top:10px}.row input{flex:1}
-  .w{display:inline-block;margin:3px;padding:3px 7px;border-radius:6px;font-size:13px}
-  .w.ok{background:#1e3b2a;color:#8fe0ad}.w.bad{background:#3d1f1f;color:#ff9b95}
-  h2{font-size:15px;margin:0 0 8px}
-</style>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:,">
 </head>
 <body>
 <header>
   <h1>Offline Voice Tutor</h1>
   <label>Language <select id="lang"><option value="">Auto-detect</option></select></label>
   <label><input type="checkbox" id="slow"> Slow narration</label>
+  <label><input type="checkbox" id="speakText"> Speak text replies</label>
+  <label><input type="checkbox" class="phToggle" value="ipa" checked> IPA</label>
+  <label><input type="checkbox" class="phToggle" value="readable" checked> Readable</label>
+  <label><input type="checkbox" class="phToggle" value="romanized" checked> Romanized</label>
   <button class="sec" id="reset">New chat</button>
 </header>
 <main>
@@ -38,99 +23,31 @@
     <div class="row">
       <input id="text" placeholder="Type a message (text in → text out)…" autocomplete="off">
       <button id="send">Send</button>
-      <button id="mic" title="Voice in → voice out">Hold to talk</button>
+      <button id="mic" title="Tap to talk (auto-stops on silence) or hold to talk. Voice in → voice out.">Talk</button>
     </div>
-    <div class="meta" id="status">Ready.</div>
+    <div class="meta" id="status">Loading…</div>
   </section>
   <aside class="card">
-    <h2>Pronunciation practice</h2>
-    <textarea id="target" rows="3" style="width:100%" placeholder="Phrase to practise, e.g. Je voudrais un café, s'il vous plaît."></textarea>
-    <div class="row">
-      <button class="sec" id="hear">Hear it</button>
-      <button id="pmic">Hold to record</button>
+    <div class="tabs">
+      <button class="on" data-tab="practice">Practice</button>
+      <button data-tab="progress">Progress</button>
     </div>
-    <div id="presult" class="meta"></div>
+    <div id="tab-practice">
+      <textarea id="target" rows="3" style="width:100%" placeholder="Phrase to practise, e.g. Je voudrais un croissant, s'il vous plaît."></textarea>
+      <div id="targetPh"></div>
+      <div class="row">
+        <button class="sec" id="hear">Hear it</button>
+        <button class="sec" id="hearSlow">Slow</button>
+        <button id="pmic" title="Tap or hold, then repeat the phrase">Record</button>
+        <button class="sec hidden" id="playMine">Play mine</button>
+      </div>
+      <div id="presult"></div>
+    </div>
+    <div id="tab-progress" class="hidden">
+      <div id="progress"></div>
+    </div>
   </aside>
 </main>
-<script>
-const $ = id => document.getElementById(id);
-const session = crypto.randomUUID();
-const log = $("log"), status = $("status");
-
-fetch("/api/health").then(r => r.json()).then(h => {
-  for (const [code, [name]] of Object.entries(h.languages)) {
-    const o = document.createElement("option");
-    o.value = code; o.textContent = name + (h.neural_voices.includes(code) ? " ★" : "");
-    $("lang").appendChild(o);
-  }
-  status.textContent = `Ready. LLM: ${h.llm} · STT: whisper-${h.whisper} · ★ = neural voice installed`;
-});
-
-function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
-function add(cls, html){const d=document.createElement("div");d.className="msg "+cls;d.innerHTML=html;log.appendChild(d);log.scrollTop=log.scrollHeight;return d}
-function playB64(b64){new Audio("data:audio/wav;base64,"+b64).play()}
-async function speak(text, lang){
-  const r = await fetch("/api/speak",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({text, lang, slow:$("slow").checked})});
-  new Audio(URL.createObjectURL(await r.blob())).play();
-}
-function botHtml(d){
-  return `<div>${esc(d.reply)}</div><div class="ipa">/${esc(d.ipa)}/</div>
-  <div class="meta">${d.lang_name}</div>`;
-}
-
-async function sendText(){
-  const text = $("text").value.trim(); if(!text) return;
-  $("text").value = ""; add("user", esc(text)); status.textContent = "Thinking…";
-  const r = await fetch("/api/text",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({text, session, lang:$("lang").value||null})});
-  const d = await r.json(); add("bot", botHtml(d)); status.textContent = "Ready.";
-}
-$("send").onclick = sendText;
-$("text").onkeydown = e => { if(e.key === "Enter") sendText(); };
-
-// push-to-talk recorder
-function recorder(btn, onBlob){
-  let rec, chunks = [];
-  const start = async e => {
-    e.preventDefault();
-    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
-    rec = new MediaRecorder(stream); chunks = [];
-    rec.ondataavailable = ev => chunks.push(ev.data);
-    rec.onstop = () => { stream.getTracks().forEach(t=>t.stop()); onBlob(new Blob(chunks,{type:rec.mimeType})); };
-    rec.start(); btn.classList.add("rec"); btn.dataset.label ??= btn.textContent; btn.textContent = "Recording… release";
-  };
-  const stop = () => { if(rec && rec.state === "recording"){ rec.stop(); btn.classList.remove("rec"); btn.textContent = btn.dataset.label; } };
-  btn.onmousedown = start; btn.ontouchstart = start;
-  btn.onmouseup = stop; btn.onmouseleave = stop; btn.ontouchend = stop;
-}
-
-recorder($("mic"), async blob => {
-  status.textContent = "Transcribing and thinking…";
-  const fd = new FormData();
-  fd.append("audio", blob, "voice.webm"); fd.append("session", session);
-  fd.append("lang_code", $("lang").value); fd.append("slow", $("slow").checked);
-  const d = await (await fetch("/api/voice",{method:"POST",body:fd})).json();
-  if(d.error){ status.textContent = d.error; return; }
-  const unclear = d.unclear_words.length ? `<div class="meta">Unclear words: ${esc(d.unclear_words.join(", "))}</div>` : "";
-  add("user", `<i>(voice)</i> ${esc(d.transcript)}${unclear}`);
-  add("bot", botHtml(d)); playB64(d.audio_b64); status.textContent = "Ready.";
-});
-
-$("hear").onclick = () => { const t=$("target").value.trim(); if(t) speak(t, $("lang").value||null); };
-recorder($("pmic"), async blob => {
-  const target = $("target").value.trim(); if(!target){ $("presult").textContent = "Type a phrase first."; return; }
-  $("presult").textContent = "Scoring…";
-  const fd = new FormData(); fd.append("audio", blob, "practice.webm");
-  fd.append("target", target); fd.append("lang_code", $("lang").value);
-  const d = await (await fetch("/api/practice",{method:"POST",body:fd})).json();
-  $("presult").innerHTML = `<div style="font-size:22px;color:var(--fg)">Score: ${d.overall}/100</div>
-    <div class="ipa">Target: /${esc(d.target_ipa)}/</div>
-    <div>Heard: “${esc(d.heard)}”</div>
-    <div>${d.words.map(w=>`<span class="w ${w.ok?"ok":"bad"}" title="/${esc(w.ipa)}/">${esc(w.word)} ${w.score}</span>`).join("")}</div>
-    ${d.weak_words.length?`<div>Practise: ${esc(d.weak_words.join(", "))} (hover for IPA)</div>`:"<div>Great job!</div>"}`;
-});
-$("reset").onclick = async () => { await fetch("/api/reset?session="+session,{method:"POST"}); log.innerHTML=""; };
-</script>
+<script src="/static/app.js"></script>
 </body>
 </html>

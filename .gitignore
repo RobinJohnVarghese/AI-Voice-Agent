@@ -1,3 +1,7 @@
 .venv/
 models/
 __pycache__/
+data/
+.env
+*.wav
+.pytest_cache/
