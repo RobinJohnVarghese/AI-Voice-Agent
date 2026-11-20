@@ -1,12 +1,14 @@
 """Local LLM via Ollama (quantized GGUF model, CPU friendly), streamed token by token."""
 import json
 from collections.abc import Iterator
+from datetime import datetime
 
 import requests
 
 from . import config, lang
 
 SYSTEM = """You are a friendly multilingual speaking and pronunciation tutor running fully offline.
+Current local date and time: {now}. Use it for any question about the day, date or time.
 Rules:
 - Reply in {lang_name} unless the user explicitly asks for another language.
 - Keep replies short: 1 to 3 sentences, because they may be read aloud.
@@ -23,7 +25,8 @@ class LLMError(RuntimeError):
 
 class LLM:
     def messages(self, history: list[dict], user_text: str, lang_code: str) -> list[dict]:
-        msgs = [{"role": "system", "content": SYSTEM.format(lang_name=lang.name(lang_code))}]
+        msgs = [{"role": "system", "content": SYSTEM.format(lang_name=lang.name(lang_code),
+                                                         now=datetime.now().strftime("%A, %d %B %Y, %H:%M"))}]
         msgs += [{"role": m["role"], "content": m["content"]} for m in history[-config.HISTORY_TURNS * 2:]]
         # A per-turn reminder keeps small models from drifting into the language of earlier turns.
         msgs.append({"role": "user", "content": f"{user_text}\n\n(Reply in {lang.name(lang_code)}.)"})

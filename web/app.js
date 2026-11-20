@@ -131,6 +131,7 @@ class Recorder {
       if (blob.size > 1000) this.onBlob(blob);
     };
     this.rec.start(); this.btn.classList.add("rec"); this.btn.textContent = "Listening… (tap to stop)";
+    setStatus("Listening… speak now. It stops when you pause.");
     this.vad(ctx, stream);
   }
   // Auto-stop ~1.3 s after speech ends; give up after 10 s with no speech or 30 s total.
@@ -140,12 +141,15 @@ class Recorder {
     src.connect(an); an.connect(mute); mute.connect(ctx.destination);  // keep the graph pulled
     this.nodes = [src, an, mute];
     const data = new Float32Array(an.fftSize);
-    let heard = false, quietSince = performance.now();
+    let heard = false, quietSince = performance.now(), floor = null;
     this.timer = setInterval(() => {  // setInterval keeps running when the tab is in the background
       if (!this.rec) return clearInterval(this.timer);
       an.getFloatTimeDomainData(data);
       const rms = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length), now = performance.now();
-      if (rms > 0.02) { heard = true; quietSince = now; }
+      // Adaptive threshold: track the background noise floor so quiet microphones still trigger.
+      if (rms > 0) floor = floor === null || rms < floor ? rms : floor * 1.002;
+      const threshold = Math.min(0.02, Math.max(0.004, (floor ?? 0.007) * 3));
+      if (rms > threshold) { heard = true; quietSince = now; }
       const elapsed = now - this.t0;
       if ((heard && now - quietSince > 1300) || (!heard && elapsed > 10000) || elapsed > 30000) this.stop();
     }, 50);
